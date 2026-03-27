@@ -1,8 +1,8 @@
-const GAME_WIDTH     = 1200;
-const GAME_HEIGHT    = 600;
-const FLOOR_Y        = 536;
-const PLAYER_X       = 100;
-const TILE_W         = 64;
+const GAME_WIDTH  = 1200;
+const GAME_HEIGHT = 600;
+const FLOOR_Y     = 536;
+const PLAYER_X    = 100;
+const TILE_W      = 64;
 
 const INITIAL_SPEED   = 250;
 const SPEED_INCREMENT = 20;
@@ -17,35 +17,31 @@ class GameScene extends Phaser.Scene {
     this.load.image('chao',    'assets/chao.png');
     this.load.image('inimigo', 'assets/inimigo.png');
 
-    // frutas
     this.load.image('morango', 'assets/morango.png');
     this.load.image('banana',  'assets/banana.png');
     this.load.image('cereja',  'assets/cereja.png');
     this.load.image('maca',    'assets/maca.png');
 
-    this.load.audio('pulo',    'assets/pulo.ogg');
+    this.load.audio('pulo',  'assets/pulo.ogg');
+    this.load.audio('fruit', 'assets/faaah.mp3');     // fruta
+    this.load.audio('hit',   'assets/galinha.mp3');   // morte
   }
 
   create() {
-    this.speed       = INITIAL_SPEED;
-    this.alive       = true;
+    this.speed = INITIAL_SPEED;
+    this.alive = true;
     this.gameStarted = false;
-    this.enemyPassed = false;
 
-    // score
     this.score = 0;
 
-    // coyote time
-    this.lastGroundTime = 0;
-    this.coyoteTime = 120;
+    this.jumpCount = 0;
+    this.maxJumps = 2;
 
-    // spawn inimigo
     this.enemySpawnTimer = 0;
     this.enemySpawnDelay = Phaser.Math.Between(800, 1600);
 
-    // spawn fruta
     this.fruitSpawnTimer = 0;
-    this.fruitSpawnDelay = Phaser.Math.Between(3000, 6000); // maior intervalo
+    this.fruitSpawnDelay = Phaser.Math.Between(3000, 6000);
 
     // fundo
     const bg = this.add.graphics();
@@ -80,57 +76,51 @@ class GameScene extends Phaser.Scene {
 
     this.player.setCollideWorldBounds(true);
     this.player.body.setGravityY(900);
-    this.player.body.setSize(60, 70);
-    this.player.body.setOffset(18, 26);
     this.player.play('walk');
 
     this.physics.add.collider(this.player, this.groundBody);
 
-    // inimigo
-    this.enemy = this.physics.add.image(-200, FLOOR_Y, 'inimigo')
-      .setOrigin(0.5, 1);
-    this.enemy.body.allowGravity = false;
-    this.spawnEnemy();
-    this.enemy.setVelocityX(0);
+    // grupo de inimigos
+    this.enemies = this.physics.add.group();
 
     // fruta
     this.fruit = null;
 
     // colisões
-    this.physics.add.overlap(this.player, this.enemy, this.hitEnemy, null, this);
+    this.physics.add.overlap(this.player, this.enemies, this.hitEnemy, null, this);
 
     // input
     this.spaceKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE);
 
-    // áudio
-    this.jumpSound = this.sound.add('pulo');
+    // sons
+    this.jumpSound  = this.sound.add('pulo');
+    this.hitSound   = this.sound.add('hit');
+    this.fruitSound = this.sound.add('fruit');
 
     // textos
     this.msgText = this.add.text(
-      GAME_WIDTH / 2, GAME_HEIGHT / 2 - 20,
+      GAME_WIDTH / 2, GAME_HEIGHT / 2,
       'PRESSIONE ESPAÇO PARA COMEÇAR',
-      { font: 'bold 18px monospace', fill: '#1a1a2e', stroke: '#fff', strokeThickness: 3 }
-    ).setOrigin(0.5).setDepth(10);
+      { font: 'bold 18px monospace', fill: '#000' }
+    ).setOrigin(0.5);
 
-    this.levelText = this.add.text(
-      GAME_WIDTH - 10, 10,
-      'vel: ' + this.speed,
-      { font: '14px monospace', fill: '#1a1a2e' }
-    ).setOrigin(1, 0).setDepth(10);
+    this.scoreText = this.add.text(10, 10, 'score: 0', {
+      font: '14px monospace', fill: '#000'
+    });
 
-    this.scoreText = this.add.text(
-      10, 10,
-      'score: 0',
-      { font: '14px monospace', fill: '#1a1a2e' }
-    ).setDepth(10);
+    this.levelText = this.add.text(GAME_WIDTH - 10, 10, 'vel: ' + this.speed, {
+      font: '14px monospace', fill: '#000'
+    }).setOrigin(1, 0);
   }
 
   spawnEnemy() {
-    const posX = Phaser.Math.Between(GAME_WIDTH + 50, GAME_WIDTH + 200);
-    this.enemy.setPosition(posX, FLOOR_Y);
-    this.enemyPassed = false;
-    this.enemy.body.setSize(50, 50);
-    this.enemy.body.setOffset(7, 14);
+    const posX = Phaser.Math.Between(GAME_WIDTH + 50, GAME_WIDTH + 300);
+
+    const enemy = this.enemies.create(posX, FLOOR_Y, 'inimigo')
+      .setOrigin(0.5, 1);
+
+    enemy.body.allowGravity = false;
+    enemy.passed = false;
   }
 
   spawnFruit() {
@@ -143,13 +133,10 @@ class GameScene extends Phaser.Scene {
 
     const choice = Phaser.Utils.Array.GetRandom(fruits);
 
-    // posição horizontal mais distante
     const posX = Phaser.Math.Between(GAME_WIDTH + 200, GAME_WIDTH + 600);
+    const height = Phaser.Math.Between(40, 160);
 
-    // altura variável (sempre pegável)
-    const heightOffset = Phaser.Math.Between(40, 160);
-
-    this.fruit = this.physics.add.image(posX, FLOOR_Y - heightOffset, choice.key)
+    this.fruit = this.physics.add.image(posX, FLOOR_Y - height, choice.key)
       .setOrigin(0.5, 1);
 
     this.fruit.body.allowGravity = false;
@@ -162,6 +149,8 @@ class GameScene extends Phaser.Scene {
     this.score += fruit.value;
     this.scoreText.setText('score: ' + this.score);
 
+    this.fruitSound.play();
+
     fruit.destroy();
     this.fruit = null;
   }
@@ -171,14 +160,15 @@ class GameScene extends Phaser.Scene {
 
     this.alive = false;
 
-    this.enemy.setVelocityX(0);
+    this.hitSound.play();
+
+    this.enemies.setVelocityX(0);
     this.player.setVelocityX(0);
     this.player.anims.stop();
-    this.player.setTexture('walk1');
 
-    this.cameras.main.flash(300, 220, 20, 20);
-
-    this.msgText.setText('GAME OVER!\nESPAÇO para recomeçar');
+    this.msgText.setText(
+      'GAME OVER!\nVOCÊ NÃO TEM AURA MANO\n\nESPAÇO para recomeçar'
+    );
     this.msgText.setVisible(true);
 
     this.physics.pause();
@@ -198,58 +188,25 @@ class GameScene extends Phaser.Scene {
       if (Phaser.Input.Keyboard.JustDown(this.spaceKey)) {
         this.gameStarted = true;
         this.msgText.setVisible(false);
-        this.enemy.setVelocityX(-this.speed);
       }
       return;
     }
 
-    // chão
+    // chão andando
     this.groundGroup.getChildren().forEach(tile => {
       tile.x -= this.speed * dt;
+
       if (tile.x + TILE_W < 0) {
         const rightmost = this.groundGroup.getChildren().reduce((max, t) => t.x > max.x ? t : max);
         tile.x = rightmost.x + TILE_W;
       }
     });
 
-    // pulo
-    if (this.player.body.blocked.down) this.lastGroundTime = time;
-
-    const canJump = this.player.body.blocked.down || (time - this.lastGroundTime < this.coyoteTime);
-
-    if (Phaser.Input.Keyboard.JustDown(this.spaceKey) && canJump) {
-      this.player.setVelocityY(JUMP_VELOCITY);
-      this.jumpSound.play();
-
-      this.tweens.add({
-        targets: this.player,
-        scaleY: 0.8,
-        scaleX: 1.2,
-        duration: 100,
-        yoyo: true
-      });
-    }
-
-    // inimigo
-    this.enemy.setVelocityX(-this.speed);
-
-    if (this.enemy.x + 32 < 0 && !this.enemyPassed) {
-      this.enemyPassed = true;
-
-      // ponto por desviar
-      this.score += 10;
-      this.scoreText.setText('score: ' + this.score);
-
-      this.speed += SPEED_INCREMENT * 0.8;
-      this.levelText.setText('vel: ' + Math.floor(this.speed));
-
-      this.enemy.setPosition(-200, FLOOR_Y);
+    // spawn inimigos
+    if (time > this.enemySpawnTimer + this.enemySpawnDelay) {
+      this.spawnEnemy();
       this.enemySpawnTimer = time;
       this.enemySpawnDelay = Phaser.Math.Between(800, 1600);
-    }
-
-    if (this.enemyPassed && time > this.enemySpawnTimer + this.enemySpawnDelay) {
-      this.spawnEnemy();
     }
 
     // spawn fruta
@@ -259,7 +216,37 @@ class GameScene extends Phaser.Scene {
       this.fruitSpawnDelay = Phaser.Math.Between(3000, 6000);
     }
 
-    // movimento fruta
+    // pulo duplo
+    if (this.player.body.blocked.down) {
+      this.jumpCount = 0;
+    }
+
+    if (Phaser.Input.Keyboard.JustDown(this.spaceKey) && this.jumpCount < this.maxJumps) {
+      this.player.setVelocityY(JUMP_VELOCITY);
+      this.jumpSound.play();
+      this.jumpCount++;
+    }
+
+    // inimigos andando + score
+    this.enemies.getChildren().forEach(enemy => {
+      enemy.setVelocityX(-this.speed);
+
+      if (enemy.x < PLAYER_X && !enemy.passed) {
+        enemy.passed = true;
+
+        this.score += 10;
+        this.scoreText.setText('score: ' + this.score);
+
+        this.speed += SPEED_INCREMENT * 0.5;
+        this.levelText.setText('vel: ' + Math.floor(this.speed));
+      }
+
+      if (enemy.x < -100) {
+        enemy.destroy();
+      }
+    });
+
+    // fruta andando
     if (this.fruit) {
       this.fruit.setVelocityX(-this.speed);
 
@@ -276,7 +263,6 @@ const config = {
   width:  GAME_WIDTH,
   height: GAME_HEIGHT,
   parent: 'game-container',
-  backgroundColor: '#87ceeb',
   physics: {
     default: 'arcade',
     arcade: { gravity: { y: 0 }, debug: false }
